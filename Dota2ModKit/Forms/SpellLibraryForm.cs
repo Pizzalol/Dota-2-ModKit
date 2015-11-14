@@ -90,23 +90,31 @@ namespace Dota2ModKit.Forms {
 
 		private void initTreeView() {
 			populateTreeView();
-			treeView1.Nodes[0].ExpandAll();
-			treeView1.Nodes[1].ExpandAll();
-			treeView1.SelectedNode = treeView1.Nodes[0].Nodes[0].Nodes[0];
+			treeView1.Nodes[0].ExpandAll(); // abilities
+			treeView1.Nodes[1].ExpandAll(); // items
+			treeView1.SelectedNode = treeView1.Nodes[0].Nodes[0].Nodes[0]; // abilities/hero_name/first_ability
 
 			treeView1.AfterSelect += (s, e) => {
-				TreeNode node = e.Node;
+				TreeNode node = e.Node; // first selected node is the first ability of the first hero
 
 				if (node.Parent != null && node.Parent.Parent != null && node.Parent.Parent.Text == "Abilities") {
 					string abilName = node.Name;
 					string heroName = node.Parent.Name;
-					string p = Path.Combine(npcPath, "abilities", abilName);
+					string p = Path.Combine(npcPath, "abilities", heroName, abilName);
 					if (File.Exists(p)) {
 						changeToKV();
 						textBox1.Text = File.ReadAllText(p);
 						currKVPath = p;
 
-						string lua = Path.Combine(luaHeroesPath, "hero_" + heroName, abilName.Replace(heroName + "_", "").Replace("_datadriven.txt", ".lua"));
+                        string lua;
+                        if(abilName.EndsWith("_lua.txt")) // Check if it is a Lua ability
+                        {
+                            lua = Path.Combine(luaHeroesPath, "hero_" + heroName, abilName.Replace(".txt", ".lua"));
+                        }
+                        else
+                        {
+                            lua = Path.Combine(luaHeroesPath, "hero_" + heroName, abilName.Replace("_datadriven.txt", ".lua"));
+                        }
 						if (!File.Exists(lua)) {
 							luaKVBtn.Enabled = false;
 
@@ -157,75 +165,41 @@ namespace Dota2ModKit.Forms {
 			TreeNode abilities = treeView1.Nodes.Add("Abilities");
 			TreeNode items = treeView1.Nodes.Add("Items");
 
-			string[] abilPaths = Directory.GetFiles(Path.Combine(npcPath, "abilities"), "*.txt");
+			//string[] abilPaths = Directory.GetFiles(Path.Combine(npcPath, "abilities"), "*.txt");
 			string[] itemPaths = Directory.GetFiles(Path.Combine(npcPath, "items"), "*.txt");
             Dictionary<string, TreeNode> heroNames = new Dictionary<string, TreeNode>();
-			string currHeroName = "";
+			//string currHeroName = "";
 			List<string> abilArr = new List<string>();
-			//StringBuilder allAbils = new StringBuilder();
+            //StringBuilder allAbils = new StringBuilder();
 
-			foreach (string abilPath in abilPaths) {
-				string abilName = abilPath.Substring(abilPath.LastIndexOf('\\') + 1);
+            string abilityFolder = Path.Combine(npcPath, "abilities");
+            string[] heroPaths = Directory.GetDirectories(abilityFolder);
+            string[] abilPaths;
+            string heroName;
+            TreeNode heroNode;
+            TreeNode abilNode;
 
-				abilName = abilName.Replace(".txt", "").Replace("_datadriven", "");
-				string heroName = abilName.Substring(0, abilName.IndexOf('_'));
+            foreach (string heroPath in heroPaths)
+            {
+                // Reads hero names from the folder names
+                heroName = heroPath.Remove(0, abilityFolder.Length + 1);
 
-				if (heroName =="phantom" || heroName == "shadow" || heroName == "dark") {
-					// hardcode these
-					string[] split = abilName.Split('_');
-					heroName = split[0] + "_" + split[1];
+                abilPaths = Directory.GetFiles(heroPath);
 
-				}
+                heroNode = abilities.Nodes.Add(Util.MakeUnderscoreStringNice(heroName));
+                heroNode.Name = heroName;
+                heroNames.Add(heroName, heroNode);
 
-				if (currHeroName == "") {
-					currHeroName = heroName;
-				}
+                // Reads all the ability names inside the folder and assigns them to the hero
+                foreach (string abilPath in abilPaths)
+                {
+                    string abilName = abilPath.Substring(abilPath.LastIndexOf('\\') + 1);
+                    string abilNameClean = abilName.Replace(".txt", "").Replace("_datadriven", "");               
 
-				if (heroName.StartsWith(currHeroName)) {
-					abilArr.Add(abilPath.Substring(abilPath.LastIndexOf('\\') + 1));
-				} else {
-					currHeroName = heroName;
-
-					string commonHeroName = Util.FindCommonBeginning(abilArr.ToArray());
-					if (commonHeroName.EndsWith("_")) {
-						commonHeroName = commonHeroName.Substring(0, commonHeroName.Length - 1);
-					}
-					commonHeroName = commonHeroName.Replace(".txt", "").Replace("_datadriven", "");
-
-					TreeNode heroNode = null;
-					for (int i = 0; i < abilArr.Count; i++) {
-						string abilName2 = abilArr[i];
-						string abilName3 = abilName2.Replace("_datadriven", "").Replace(".txt", "");
-						string path2 = Path.Combine(npcPath, "abilities", abilName2);
-						string txt = File.ReadAllText(path2);
-
-                        if (!txt.StartsWith("//") && !Util.ContainsKVKey(txt)) {
-							continue;
-						}
-                        
-						string com = commonHeroName + "_";
-						if (abilName3.StartsWith(com)) {
-							abilName3 = abilName3.Substring(com.Length, abilName3.Length - com.Length);
-						}
-
-						if (!heroNames.ContainsKey(commonHeroName)) {
-							//Console.WriteLine("\"" + commonHeroName + "\"");
-							//Console.WriteLine("\"" + Util.MakeUnderscoreStringNice(commonHeroName) + "\"");
-							heroNode = abilities.Nodes.Add(Util.MakeUnderscoreStringNice(commonHeroName));
-							heroNode.Name = commonHeroName;
-                            heroNames.Add(commonHeroName, heroNode);
-							//heroNode.Expand();
-						}
-
-						// add the abil to the hero node
-						TreeNode abilNode = heroNames[commonHeroName].Nodes.Add(Util.MakeUnderscoreStringNice(abilName3));
-						abilNode.Name = abilName2;
-					}
-
-					abilArr.Clear();
-					abilArr.Add(abilPath.Substring(abilPath.LastIndexOf('\\') + 1));
-				}
-			}
+                    abilNode = heroNames[heroName].Nodes.Add(Util.MakeUnderscoreStringNice(abilNameClean));
+                    abilNode.Name = abilName;                    
+                }
+            }           
 
 			// done with abils. now onto items.
 			foreach (string itemPath in itemPaths) {
